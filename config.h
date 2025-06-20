@@ -23,7 +23,13 @@
 #define CFG_UNHIDE_PID "unhide_pid"
 #define CFG_HIDE_FILE "hide_file"
 #define CFG_UNHIDE_FILE "unhide_file"
+#define CFG_HIDE_DIR "hide_dir"           // NUEVO - Directorios
+#define CFG_UNHIDE_DIR "unhide_dir"       // NUEVO - Directorios
 #define CFG_HIDE "hide"
 #define CFG_UNHIDE "unhide"
 #define CFG_PROTECT "protect"
 #define CFG_UNPROTECT "unprotect"
+#define CFG_HIDE_MODULE "hide_module"     // Módulos de kernel
+#define CFG_UNHIDE_MODULE "unhide_module" // Módulos de kernel
+#define CFG_HIDE_CONNECTION "hide_connection"     // Conexiones de red
+#define CFG_UNHIDE_CONNECTION "unhide_connection" // Conexiones de red

